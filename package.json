@@ -1,0 +1,21 @@
+{
+  "name": "video-node",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "Media Processing Service - extracts audio, detects scenes, extracts keyframes from videos",
+  "dependencies": {
+    "bullmq": "^5.1.0",
+    "dotenv": "^16.3.1",
+    "fluent-ffmpeg": "^2.1.2",
+    "ioredis": "^5.3.2",
+    "uuid": "^9.0.1"
+  }
+}
