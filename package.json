@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "vision": "node visionProcessor.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -16,6 +17,7 @@
     "dotenv": "^16.3.1",
     "fluent-ffmpeg": "^2.1.2",
     "ioredis": "^5.3.2",
+    "openai": "^4.20.0",
     "uuid": "^9.0.1"
   }
 }
