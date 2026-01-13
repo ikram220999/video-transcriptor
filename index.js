@@ -56,10 +56,10 @@ const upload = multer({
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Serve the upload page
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'upload.html'));
-});
+// // Serve the upload page
+// app.get('/', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'upload.html'));
+// });
 
 // API endpoint to upload and process video
 app.post('/api/upload', upload.single('video'), async (req, res) => {
