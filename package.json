@@ -1,11 +1,11 @@
 {
   "name": "video-node",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node index.js",
+    "dev": "node --watch index.js",
     "server": "node server.js",
     "server:dev": "node --watch server.js",
     "vision": "node visionProcessor.js",
