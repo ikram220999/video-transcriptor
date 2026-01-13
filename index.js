@@ -154,6 +154,10 @@ Prerequisites:
   }
 }
 
-main();
+// Only run CLI if this is the entry point
+const isMainModule = process.argv[1]?.includes('index.js');
+if (isMainModule) {
+  main();
+}
 
 export { processVideo };

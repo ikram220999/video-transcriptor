@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Story Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a25;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.3);
+      --text-primary: #f0f0f5;
+      --text-secondary: #8888a0;
+      --border: #2a2a3a;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background-image: 
+        radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg-primary) 0%, #0d0d14 100%);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #fff 0%, #a5a5c0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      font-weight: 300;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: var(--bg-secondary);
+    }
+
+    .upload-zone:hover {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.1);
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .upload-zone.has-file {
+      border-color: var(--success);
+      border-style: solid;
+    }
+
+    .upload-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.8;
+    }
+
+    .upload-text {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    .upload-text span {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .file-name {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    #videoInput {
+      display: none;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      font-family: 'Sora', sans-serif;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      resize: vertical;
+      transition: all 0.3s ease;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    textarea::placeholder {
+      color: var(--text-secondary);
+      opacity: 0.6;
+    }
+
+    .hint {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+      opacity: 0.7;
+    }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin: 1.5rem 0;
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+      border: none;
+      border-radius: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .status {
+      margin-top: 1.25rem;
+      padding: 1rem;
+      border-radius: 10px;
+      text-align: center;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .status.success {
+      display: block;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--success);
+    }
+
+    .status.error {
+      display: block;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--error);
+    }
+
+    .status.loading {
+      display: block;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--accent);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .loading-text {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎬 Video Story Generator</h1>
+      <p>Upload a video and define personas for AI-powered story generation</p>
+    </div>
+
+    <div class="card">
+      <form id="uploadForm">
+        <div class="form-group">
+          <label for="videoInput">Video File</label>
+          <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">🎥</div>
+            <div class="upload-text">
+              Drag & drop your video here or <span>browse</span>
+            </div>
+            <div class="file-name" id="fileName"></div>
+          </div>
+          <input type="file" id="videoInput" name="video" accept="video/*" required>
+          <div class="hint">Supported formats: MP4, MOV, AVI, MKV</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="form-group">
+          <label for="personas">Personas / Context</label>
+          <textarea 
+            id="personas" 
+            name="personas" 
+            placeholder="Describe the characters or personas in your story...
+
+Example:
+• Sarah: A curious 8-year-old girl who loves exploring
+• Max: Her loyal golden retriever companion
+• Setting: A magical forest during autumn"
+          ></textarea>
+          <div class="hint">This context will guide the AI in generating your story</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <button type="submit" class="btn-submit" id="submitBtn">
+          Generate Story
+        </button>
+
+        <div class="status" id="status"></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const uploadZone = document.getElementById('uploadZone');
+    const videoInput = document.getElementById('videoInput');
+    const fileName = document.getElementById('fileName');
+    const uploadForm = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const status = document.getElementById('status');
+
+    // Click to upload
+    uploadZone.addEventListener('click', () => videoInput.click());
+
+    // Drag and drop handlers
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type.startsWith('video/')) {
+        videoInput.files = files;
+        updateFileName(files[0]);
+      }
+    });
+
+    // File input change
+    videoInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        updateFileName(e.target.files[0]);
+      }
+    });
+
+    function updateFileName(file) {
+      fileName.textContent = `✓ ${file.name}`;
+      uploadZone.classList.add('has-file');
+    }
+
+    // Form submission
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(uploadForm);
+      
+      // Show loading state
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing...';
+      status.className = 'status loading';
+      status.innerHTML = '<span class="loading-text">⏳ Uploading and processing video...</span>';
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          status.className = 'status success';
+          status.innerHTML = `
+            <div style="text-align: left;">
+              <strong>✓ ${result.message || 'Video processed successfully!'}</strong>
+              <div style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
+                Job ID: ${result.jobId}<br>
+                Scenes: ${result.summary?.scenesDetected || 0} | 
+                Keyframes: ${result.summary?.keyframesExtracted || 0}
+              </div>
+              ${result.story ? `
+                <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                  <strong>📖 Generated Story:</strong>
+                  <p style="margin-top: 0.5rem; white-space: pre-wrap;">${result.story}</p>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      } catch (error) {
+        status.className = 'status error';
+        status.textContent = `✗ ${error.message}`;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate Story';
+      }
+    });
+  </script>
+</body>
+</html>
