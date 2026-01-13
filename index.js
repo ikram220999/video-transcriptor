@@ -385,5 +385,3 @@ app.listen(PORT, () => {
   console.log(`   📤 API endpoint: POST /api/upload`);
   console.log('\n' + '═'.repeat(60) + '\n');
 });
-
-export default app;
