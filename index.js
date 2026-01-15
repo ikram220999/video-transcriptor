@@ -6,8 +6,32 @@ import { createWriteStream } from 'fs';
 import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import cors from 'cors';
+import { v4 as uuidv4 } from 'uuid';
 import { processOutputFolder } from './visionProcessor.js';
-import { config } from './src/config.js';
+import { config, getOutputPath } from './src/config.js';
+import { extractAudio, splitAudioByScenes } from './src/audioExtractor.js';
+import { detectScenes } from './src/sceneDetector.js';
+import { extractKeyframes } from './src/keyframeExtractor.js';
+import ffmpeg from 'fluent-ffmpeg';
+
+// Get video duration using ffprobe
+function getVideoDuration(videoPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(videoPath, (err, metadata) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const duration = metadata.format.duration || 0;
+      resolve(duration);
+    });
+  });
+}
+
+// Constants for validation
+const MAX_FILE_SIZE_MB = 30;
+const MAX_DURATION_SECONDS = 60; // 1 minute
 
 dotenv.config();
 
@@ -37,7 +61,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = /mp4|mov|avi|mkv|webm|m4v/;
     const ext = path.extname(file.originalname).toLowerCase().slice(1);
@@ -50,15 +74,6 @@ const upload = multer({
     }
   }
 });
-
-// Middleware
-app.use(express.json());
-app.use(express.static(__dirname));
-
-// // Serve the upload page
-// app.get('/', (req, res) => {
-//   res.sendFile(path.join(__dirname, 'upload.html'));
-// });
 
 async function processVideo(videoPath) {
   const jobId = uuidv4();
@@ -105,25 +120,17 @@ async function processVideo(videoPath) {
       audioPath: audioSegments[idx]?.audioPath || null,
     }));
     
-    console.log('\n' + '─'.repeat(60) + '\n');
-    
-    // Step 4: Publish to queue
-    console.log('📌 STEP 4: Publishing to Vision Service\n');
-    await initQueue();
-    const publishedJobs = await publishSceneJobs(jobId, videoPath, sceneData);
-    
     // Generate summary
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     
     console.log('\n' + '═'.repeat(60));
-    console.log('✨ PROCESSING COMPLETE');
+    console.log('✨ MEDIA PROCESSING COMPLETE');
     console.log('═'.repeat(60));
     console.log(`\n📊 Summary:`);
     console.log(`   - Job ID: ${jobId}`);
     console.log(`   - Scenes Detected: ${scenes.length}`);
     console.log(`   - Audio Segments: ${audioSegments.length}`);
     console.log(`   - Keyframes Extracted: ${keyframeData.reduce((sum, s) => sum + s.keyframes.length, 0)}`);
-    console.log(`   - Jobs Published: ${publishedJobs.length}`);
     console.log(`   - Processing Time: ${elapsed}s`);
     console.log(`   - Output Directory: ${jobOutputDir}`);
     console.log('\n' + '═'.repeat(60) + '\n');
@@ -146,45 +153,195 @@ async function processVideo(videoPath) {
   } catch (error) {
     console.error('\n❌ Processing failed:', error.message);
     throw error;
-  } finally {
-    await closeQueue();
   }
 }
 
-// API endpoint to upload and process video
+// Middleware
+app.use(express.json());
+app.use(express.static(__dirname));
+app.use(cors());
+// Serve the upload page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'upload.html'));
+});
+
+// Helper to send SSE events
+function sendSSE(res, event, data) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+// API endpoint to upload and process video with SSE progress
 app.post('/api/upload', upload.single('video'), async (req, res) => {
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No video file uploaded' });
+      sendSSE(res, 'error', { message: 'No video file uploaded' });
+      return res.end();
     }
 
     const videoPath = req.file.path;
     const personas = req.body.personas || '';
+    const fileSizeMB = req.file.size / (1024 * 1024);
 
-    console.log('\n' + '═'.repeat(60));
-    console.log('📤 NEW UPLOAD RECEIVED');
-    console.log('═'.repeat(60));
-    console.log(`📁 File: ${req.file.originalname}`);
-    console.log(`📏 Size: ${(req.file.size / (1024 * 1024)).toFixed(2)} MB`);
-    console.log(`👥 Personas: ${personas ? 'Provided' : 'None'}`);
-    console.log('═'.repeat(60) + '\n');
+    // Progress: Upload received
+    sendSSE(res, 'progress', { 
+      step: 'upload', 
+      status: 'completed',
+      message: `Video uploaded: ${req.file.originalname}`,
+      details: { fileName: req.file.originalname, sizeMB: fileSizeMB.toFixed(2) }
+    });
 
-    // Process the video
-    const result = await processVideo(videoPath);
+    // Progress: Validating video
+    sendSSE(res, 'progress', { 
+      step: 'validation', 
+      status: 'started',
+      message: 'Checking video duration...'
+    });
 
-    // Save personas to the job output directory
-    const jobOutputDir = path.join(config.rootDir, config.outputDir, result.jobId);
-    if (personas) {
-      const personasPath = path.join(jobOutputDir, 'personas.txt');
-      await fs.writeFile(personasPath, personas, 'utf-8');
-      console.log(`\n✅ Personas saved to: ${personasPath}`);
+    const duration = await getVideoDuration(videoPath);
+
+    if (duration > MAX_DURATION_SECONDS) {
+      await fs.unlink(videoPath);
+      sendSSE(res, 'error', { 
+        message: `Video too long. Maximum duration is ${MAX_DURATION_SECONDS} seconds (1 minute). Your video is ${duration.toFixed(2)} seconds.` 
+      });
+      return res.end();
     }
 
-    // Run vision processor directly (no Redis needed)
-    console.log('\n📌 STEP 5: Running Vision Processor\n');
-    const visionResults = await processOutputFolder(jobOutputDir);
+    sendSSE(res, 'progress', { 
+      step: 'validation', 
+      status: 'completed',
+      message: `Video validated: ${duration.toFixed(2)}s duration`,
+      details: { durationSeconds: duration.toFixed(2) }
+    });
 
-    // Read the generated story
+    // Generate job ID
+    const jobId = uuidv4();
+    const jobOutputDir = getOutputPath(jobId);
+    await fs.mkdir(jobOutputDir, { recursive: true });
+
+    sendSSE(res, 'progress', { 
+      step: 'init', 
+      status: 'completed',
+      message: `Job created: ${jobId}`,
+      details: { jobId }
+    });
+
+    // Step 1: Scene Detection
+    sendSSE(res, 'progress', { 
+      step: 'scenes', 
+      status: 'started',
+      message: 'Detecting scenes...'
+    });
+
+    const scenes = await detectScenes(videoPath, jobId);
+
+    sendSSE(res, 'progress', { 
+      step: 'scenes', 
+      status: 'completed',
+      message: `Detected ${scenes.length} scenes`,
+      details: { sceneCount: scenes.length }
+    });
+
+    // Step 2: Audio Extraction
+    sendSSE(res, 'progress', { 
+      step: 'audio', 
+      status: 'started',
+      message: 'Extracting audio segments...'
+    });
+
+    const audioSegments = await splitAudioByScenes(videoPath, scenes, jobId);
+
+    sendSSE(res, 'progress', { 
+      step: 'audio', 
+      status: 'completed',
+      message: `Extracted ${audioSegments.length} audio segments`,
+      details: { audioCount: audioSegments.length }
+    });
+
+    // Step 3: Keyframe Extraction
+    sendSSE(res, 'progress', { 
+      step: 'keyframes', 
+      status: 'started',
+      message: 'Extracting keyframes...'
+    });
+
+    const keyframeData = await extractKeyframes(videoPath, scenes, jobId);
+    const totalKeyframes = keyframeData.reduce((sum, s) => sum + s.keyframes.length, 0);
+
+    sendSSE(res, 'progress', { 
+      step: 'keyframes', 
+      status: 'completed',
+      message: `Extracted ${totalKeyframes} keyframes`,
+      details: { keyframeCount: totalKeyframes }
+    });
+
+    // Merge audio with keyframes
+    const sceneData = keyframeData.map((kf, idx) => ({
+      ...kf,
+      audioPath: audioSegments[idx]?.audioPath || null,
+    }));
+
+    // Save processing result
+    await fs.writeFile(path.join(jobOutputDir, 'result.json'), JSON.stringify({
+      jobId,
+      videoPath,
+      scenesDetected: scenes.length,
+      audioSegments: audioSegments.length,
+      keyframesExtracted: totalKeyframes,
+      completedAt: new Date().toISOString(),
+      scenes: sceneData,
+    }, null, 2));
+
+    // Save personas
+    if (personas) {
+      await fs.writeFile(path.join(jobOutputDir, 'personas.txt'), personas, 'utf-8');
+      sendSSE(res, 'progress', { 
+        step: 'personas', 
+        status: 'completed',
+        message: 'Personas saved'
+      });
+    }
+
+    // Step 4: Vision Processing
+    sendSSE(res, 'progress', { 
+      step: 'vision', 
+      status: 'started',
+      message: 'Starting AI vision analysis...',
+      details: { totalScenes: scenes.length }
+    });
+
+    // Custom vision processing with progress updates
+    const visionResults = await processOutputFolderWithProgress(jobOutputDir, (progress) => {
+      sendSSE(res, 'progress', {
+        step: 'vision',
+        status: 'processing',
+        message: progress.message,
+        details: progress
+      });
+    });
+
+    sendSSE(res, 'progress', { 
+      step: 'vision', 
+      status: 'completed',
+      message: `Analyzed ${visionResults.length} scenes with AI`,
+      details: { analyzedScenes: visionResults.length }
+    });
+
+    // Step 5: Final Story Generation
+    sendSSE(res, 'progress', { 
+      step: 'story', 
+      status: 'started',
+      message: 'Generating final story...'
+    });
+
     let story = '';
     try {
       story = await fs.readFile(path.join(jobOutputDir, 'story.txt'), 'utf-8');
@@ -192,26 +349,41 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
       story = '(Story generation pending)';
     }
 
-    res.json({
+    sendSSE(res, 'progress', { 
+      step: 'story', 
+      status: 'completed',
+      message: 'Story generated successfully!'
+    });
+
+    // Send final complete event
+    sendSSE(res, 'complete', {
       success: true,
       message: 'Video processed and story generated!',
-      jobId: result.jobId,
+      jobId,
       summary: {
-        scenesDetected: result.scenes.length,
-        audioSegments: result.audioSegments.length,
-        keyframesExtracted: result.keyframeData.reduce((sum, s) => sum + s.keyframes.length, 0),
+        scenesDetected: scenes.length,
+        audioSegments: audioSegments.length,
+        keyframesExtracted: totalKeyframes,
         scenesAnalyzed: visionResults.length
       },
       story
     });
 
+    res.end();
+
   } catch (error) {
     console.error('❌ Upload/Processing error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Failed to process video' 
-    });
+    sendSSE(res, 'error', { message: error.message || 'Failed to process video' });
+    res.end();
   }
 });
+
+// Helper function: Vision processing with progress callback
+async function processOutputFolderWithProgress(outputFolder, onProgress) {
+  // Call processOutputFolder with progress callback
+  const results = await processOutputFolder(outputFolder, onProgress);
+  return results;
+}
 
 // Get job status/result
 app.get('/api/job/:jobId', async (req, res) => {
@@ -243,7 +415,7 @@ app.get('/api/job/:jobId/story', async (req, res) => {
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Maximum size is 500MB' });
+      return res.status(400).json({ error: `File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB` });
     }
     return res.status(400).json({ error: error.message });
   }
@@ -475,3 +647,5 @@ app.listen(PORT, () => {
   console.log(`   📤 API endpoint: POST /api/upload`);
   console.log('\n' + '═'.repeat(60) + '\n');
 });
+
+export default app;

@@ -6,7 +6,6 @@ import { createWriteStream } from 'fs';
 import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { processVideo } from './index.js';
 import { processOutputFolder } from './visionProcessor.js';
 import { config } from './src/config.js';
 

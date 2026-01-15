@@ -348,7 +348,20 @@ Example:
       uploadZone.classList.add('has-file');
     }
 
-    // Form submission
+    // Progress steps for display
+    const stepNames = {
+      upload: '📤 Upload',
+      validation: '✅ Validation',
+      init: '🆔 Initialize',
+      scenes: '🎬 Scene Detection',
+      audio: '🎵 Audio Extraction',
+      keyframes: '🖼️ Keyframes',
+      personas: '👥 Personas',
+      vision: '👁️ AI Analysis',
+      story: '📖 Story Generation'
+    };
+
+    // Form submission with SSE
     uploadForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
@@ -358,43 +371,118 @@ Example:
       submitBtn.disabled = true;
       submitBtn.textContent = 'Processing...';
       status.className = 'status loading';
-      status.innerHTML = '<span class="loading-text">⏳ Uploading and processing video...</span>';
+      status.innerHTML = `
+        <div id="progress-container" style="text-align: left;">
+          <div class="loading-text">⏳ Starting upload...</div>
+          <div id="progress-steps" style="margin-top: 1rem; font-size: 0.85rem;"></div>
+          <div id="progress-bar" style="margin-top: 0.5rem; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+            <div id="progress-fill" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.3s ease;"></div>
+          </div>
+          <div id="progress-current" style="margin-top: 0.5rem; opacity: 0.7;"></div>
+        </div>
+      `;
+
+      const progressSteps = document.getElementById('progress-steps');
+      const progressFill = document.getElementById('progress-fill');
+      const progressCurrent = document.getElementById('progress-current');
+      const completedSteps = new Set();
 
       try {
+        // Use fetch with SSE via EventSource-like handling
         const response = await fetch('/api/upload', {
           method: 'POST',
           body: formData
         });
 
-        const result = await response.json();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        if (response.ok) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          let eventType = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ') && eventType) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                handleSSEEvent(eventType, data);
+              } catch (e) {
+                console.error('Failed to parse SSE data:', e);
+              }
+              eventType = '';
+            }
+          }
+        }
+
+      } catch (error) {
+        status.className = 'status error';
+        status.textContent = `✗ ${error.message}`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate Story';
+      }
+
+      function handleSSEEvent(event, data) {
+        console.log('SSE Event:', event, data);
+
+        if (event === 'progress') {
+          const stepName = stepNames[data.step] || data.step;
+          
+          // Update progress bar for vision processing
+          if (data.step === 'vision' && data.details?.percent) {
+            progressFill.style.width = `${data.details.percent}%`;
+          }
+
+          // Update current action
+          progressCurrent.textContent = data.message;
+
+          // Add completed step
+          if (data.status === 'completed' && !completedSteps.has(data.step)) {
+            completedSteps.add(data.step);
+            const stepEl = document.createElement('div');
+            stepEl.style.cssText = 'padding: 0.25rem 0; color: var(--success);';
+            stepEl.textContent = `✓ ${stepName}: ${data.message}`;
+            progressSteps.appendChild(stepEl);
+          }
+        }
+
+        if (event === 'complete') {
+          progressFill.style.width = '100%';
           status.className = 'status success';
           status.innerHTML = `
             <div style="text-align: left;">
-              <strong>✓ ${result.message || 'Video processed successfully!'}</strong>
+              <strong>✓ ${data.message || 'Video processed successfully!'}</strong>
               <div style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
-                Job ID: ${result.jobId}<br>
-                Scenes: ${result.summary?.scenesDetected || 0} | 
-                Keyframes: ${result.summary?.keyframesExtracted || 0}
+                Job ID: ${data.jobId}<br>
+                Scenes: ${data.summary?.scenesDetected || 0} | 
+                Keyframes: ${data.summary?.keyframesExtracted || 0} |
+                Analyzed: ${data.summary?.scenesAnalyzed || 0}
               </div>
-              ${result.story ? `
-                <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+              ${data.story ? `
+                <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px; max-height: 300px; overflow-y: auto;">
                   <strong>📖 Generated Story:</strong>
-                  <p style="margin-top: 0.5rem; white-space: pre-wrap;">${result.story}</p>
+                  <p style="margin-top: 0.5rem; white-space: pre-wrap;">${data.story}</p>
                 </div>
               ` : ''}
             </div>
           `;
-        } else {
-          throw new Error(result.error || 'Upload failed');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Generate Story';
         }
-      } catch (error) {
-        status.className = 'status error';
-        status.textContent = `✗ ${error.message}`;
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Generate Story';
+
+        if (event === 'error') {
+          status.className = 'status error';
+          status.textContent = `✗ ${data.message}`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Generate Story';
+        }
       }
     });
   </script>

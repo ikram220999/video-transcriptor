@@ -271,7 +271,7 @@ Write a flowing narrative that:
   return response.choices[0].message.content;
 }
 
-async function processOutputFolder(outputFolder) {
+async function processOutputFolder(outputFolder, onProgress = null) {
   const keyframesPath = path.join(outputFolder, 'keyframes');
 
   // Check if keyframes folder exists
@@ -323,6 +323,16 @@ async function processOutputFolder(outputFolder) {
 
     console.log(`🎬 Scene ${sceneNumber}/${totalScenes}:`);
 
+    // Emit progress callback
+    if (onProgress) {
+      onProgress({
+        currentScene: sceneNumber,
+        totalScenes,
+        percent: Math.round((sceneNumber / totalScenes) * 100),
+        message: `Processing scene ${sceneNumber} of ${totalScenes}...`
+      });
+    }
+
     // Get previous scene's story part for continuity (only if it exists and was successful)
     let previousSceneContext = null;
     if (sceneNumber > 1 && results[sceneNumber - 2]?.storyPart) {
@@ -339,6 +349,17 @@ async function processOutputFolder(outputFolder) {
           ...sceneResult,
         });
         console.log(`   ✅ Processed successfully`);
+
+        // Emit scene completed progress
+        if (onProgress) {
+          onProgress({
+            currentScene: sceneNumber,
+            totalScenes,
+            percent: Math.round((sceneNumber / totalScenes) * 100),
+            message: `Scene ${sceneNumber}/${totalScenes} analyzed`,
+            sceneResult: sceneResult.storyPart ? sceneResult.storyPart.substring(0, 100) : null
+          });
+        }
         
         if (sceneResult.storyPart) {
           console.log(`   📖 "${sceneResult.storyPart.substring(0, 80)}..."`);
@@ -350,6 +371,16 @@ async function processOutputFolder(outputFolder) {
         sceneNumber,
         error: error.message,
       });
+
+      if (onProgress) {
+        onProgress({
+          currentScene: sceneNumber,
+          totalScenes,
+          percent: Math.round((sceneNumber / totalScenes) * 100),
+          message: `Scene ${sceneNumber} failed: ${error.message}`,
+          error: true
+        });
+      }
     }
 
     console.log('');
