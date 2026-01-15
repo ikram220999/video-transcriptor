@@ -288,30 +288,36 @@ async function generateFinalStory(results, personas) {
     messages: [
       {
         role: 'system',
-        content: `You are a creative storyteller who writes engaging narratives in Bahasa Melayu. 
-Your task is to take scene-by-scene descriptions (with their dialogues) and weave them into a cohesive, flowing story.
-- Maintain consistent character names and personalities
-- Incorporate dialogue naturally into the narrative
-- Write in an engaging narrative style
-- Ensure smooth transitions between scenes`
+        content: `You are a narrator describing what happens in a video. Write in Bahasa Melayu.
+
+STRICT RULES:
+- ONLY describe what is actually shown in the scenes - DO NOT invent or imagine anything
+- DO NOT add emotions, thoughts, or feelings that are not explicitly shown
+- DO NOT create dramatic storylines or plot twists
+- DO NOT embellish or exaggerate - be factual and literal
+- Simply connect the scene descriptions into readable paragraphs
+- Use simple, direct language
+- If dialogue exists, include it exactly as provided
+- Keep the tone neutral and descriptive, like a documentary narrator`
       },
       {
         role: 'user',
-        content: `Based on these scene descriptions and dialogues, write a cohesive story in Bahasa Melayu.
+        content: `Combine these scene descriptions into a simple, factual narrative in Bahasa Melayu.
 ${personasContext}
 
 SCENE DESCRIPTIONS:
 ${sceneDescriptions}
 
-Write a flowing narrative that:
-1. Connects all scenes into one cohesive story
-2. Incorporates dialogue naturally (using quotation marks)
-3. Maintains consistent character voices
-4. Has smooth transitions between scenes
-5. Is 4-6 paragraphs long`
+IMPORTANT:
+- Just smooth out the scene descriptions into flowing paragraphs
+- DO NOT add fictional elements or dramatic interpretations
+- DO NOT invent dialogue or actions not mentioned
+- Stay 100% faithful to what is described
+- Keep it simple and factual
+- Write 2-4 short paragraphs maximum`
       }
     ],
-    max_tokens: 2000,
+    max_tokens: 1500,
   });
 
   return response.choices[0].message.content;
