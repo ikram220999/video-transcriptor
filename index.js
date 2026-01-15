@@ -161,9 +161,9 @@ app.use(express.json());
 app.use(express.static(__dirname));
 app.use(cors());
 // Serve the upload page
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'upload.html'));
-});
+// app.get('/', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'upload.html'));
+// });
 
 // Helper to send SSE events
 function sendSSE(res, event, data) {
