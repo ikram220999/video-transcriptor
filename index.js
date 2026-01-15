@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { processOutputFolder } from './visionProcessor.js';
 import { config, getOutputPath } from './src/config.js';
@@ -34,6 +35,32 @@ const MAX_FILE_SIZE_MB = 30;
 const MAX_DURATION_SECONDS = 60; // 1 minute
 
 dotenv.config();
+
+// Rate limiters
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per 15 minutes
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 uploads per hour
+  message: { error: 'Upload limit reached. Maximum 10 videos per hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipFailedRequests: true, // Don't count failed uploads
+});
+
+const narrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour  
+  max: 20, // 20 narration requests per hour
+  message: { error: 'Narration limit reached. Maximum 20 requests per hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -160,6 +187,7 @@ async function processVideo(videoPath) {
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use(cors());
+app.use(generalLimiter); // Apply general rate limit to all routes
 // Serve the upload page
 // app.get('/', (req, res) => {
 //   res.sendFile(path.join(__dirname, 'upload.html'));
@@ -172,7 +200,7 @@ function sendSSE(res, event, data) {
 }
 
 // API endpoint to upload and process video with SSE progress
-app.post('/api/upload', upload.single('video'), async (req, res) => {
+app.post('/api/upload', uploadLimiter, upload.single('video'), async (req, res) => {
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -453,7 +481,7 @@ app.get('/api/job/:folderId/combined-story', async (req, res) => {
 });
 
 // Generate storytelling audio from vision_results.json
-app.get('/api/job/:folderId/narration', async (req, res) => {
+app.get('/api/job/:folderId/narration', narrationLimiter, async (req, res) => {
   try {
     const { folderId } = req.params;
     const jobDir = path.join(config.rootDir, config.outputDir, folderId);
@@ -580,7 +608,7 @@ app.get('/api/job/:folderId/narration/stream', async (req, res) => {
 });
 
 // Generate narration from story.txt (final cohesive story)
-app.get('/api/job/:folderId/narration/final', async (req, res) => {
+app.get('/api/job/:folderId/narration/final', narrationLimiter, async (req, res) => {
   try {
     const { folderId } = req.params;
     const jobDir = path.join(config.rootDir, config.outputDir, folderId);
