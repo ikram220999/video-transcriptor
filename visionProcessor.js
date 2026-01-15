@@ -35,18 +35,55 @@ async function loadAudioSegments(outputFolder) {
   const audioPath = path.join(outputFolder, 'audio', 'audio_segments.json');
   try {
     const content = await fs.readFile(audioPath, 'utf-8');
-    return JSON.parse(content);
-  } catch {
+    const segments = JSON.parse(content);
+    
+    // Verify each audio file exists and filter out missing ones
+    const validSegments = [];
+    for (const segment of segments) {
+      if (segment.audioPath) {
+        const exists = await checkFileExists(segment.audioPath);
+        if (exists) {
+          validSegments.push(segment);
+        } else {
+          console.log(`   ⚠️  Audio file missing for scene ${segment.sceneNumber}: ${segment.audioPath}`);
+        }
+      }
+    }
+    
+    return validSegments;
+  } catch (error) {
+    console.log(`   ⚠️  Could not load audio segments: ${error.message}`);
     return [];
+  }
+}
+
+async function checkFileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
 async function transcribeAudio(audioPath) {
   try {
-    // Check if file exists and has content
+    // Check if file exists
+    if (!audioPath) {
+      return null;
+    }
+
+    const fileExists = await checkFileExists(audioPath);
+    if (!fileExists) {
+      console.log(`   ⚠️  Audio file not found: ${audioPath}`);
+      return null;
+    }
+
+    // Check if file has content
     const stats = await fs.stat(audioPath);
     if (stats.size < 1000) {
       // Skip very small files (likely silence)
+      console.log(`   ⚠️  Audio file too small (likely silence), skipping`);
       return null;
     }
 
@@ -99,14 +136,23 @@ async function processScene(scenePath, sceneNumber, totalScenes, personas, audio
 
   console.log(`   📷 Processing ${imageFiles.length} images...`);
 
-  // Transcribe audio for this scene
+  // Transcribe audio for this scene (if audio exists)
   let transcript = null;
   if (audioPath) {
-    console.log(`   🎤 Transcribing audio...`);
-    transcript = await transcribeAudio(audioPath);
-    if (transcript) {
-      console.log(`   📝 Transcript: "${transcript.substring(0, 60)}${transcript.length > 60 ? '...' : ''}"`);
+    const audioExists = await checkFileExists(audioPath);
+    if (audioExists) {
+      console.log(`   🎤 Transcribing audio...`);
+      transcript = await transcribeAudio(audioPath);
+      if (transcript) {
+        console.log(`   📝 Transcript: "${transcript.substring(0, 60)}${transcript.length > 60 ? '...' : ''}"`);
+      } else {
+        console.log(`   🔇 No speech detected in audio`);
+      }
+    } else {
+      console.log(`   🔇 Audio file not found, skipping transcription`);
     }
+  } else {
+    console.log(`   🔇 No audio for this scene`);
   }
 
   // Read images and convert to base64
