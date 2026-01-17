@@ -181,56 +181,53 @@ async function processScene(scenePath, sceneNumber, totalScenes, personas, audio
     ? `\n\n## AUDIO TRANSCRIPT (what is being said in this scene):\n"${transcript}"\n\nIncorporate this dialogue/narration into your story. If you're not confident about what is being said, just ignore the audio.`
     : '';
 
-  // Build previous scene context - only include for awareness, not for continuation
+  // Build previous scene context for smooth transitions
   const previousContext = previousSceneContext
-    ? `\n\n## PREVIOUS SCENE (for context awareness only):
-"${previousSceneContext}"
-
-NOTE: This is just for context. Do NOT continue or expand on this. Focus ONLY on what you SEE in the current frames.`
+    ? `\n\n## PREVIOUS SCENE:\n"${previousSceneContext}"\n\nWrite your storyPart so it connects smoothly from this previous scene.`
     : '';
 
-  const positionContext = `This is scene ${sceneNumber} of ${totalScenes}.`;
+  const positionContext = sceneNumber === 1 
+    ? 'This is the OPENING scene.'
+    : sceneNumber === totalScenes 
+      ? 'This is the FINAL scene.'
+      : `Scene ${sceneNumber} of ${totalScenes}.`;
 
-  const prompt = `You are a video scene analyzer. Your job is to ACCURATELY DESCRIBE what you SEE in the frames.
-
-${positionContext}
+  const prompt = `You are narrating a video scene by scene. ${positionContext}
 ${personasContext}
 ${audioContext}
 ${previousContext}
 
-Analyze these ${imageFiles.length} sequential keyframes and the audio transcript (if provided).
+Analyze these ${imageFiles.length} keyframes and describe what you see.
 
 Your task:
-1. **Scene Description**: Describe ONLY what you visually see in these frames. What objects, people, or characters are shown? What actions are happening?
-2. **Dialogue/Audio**: If audio transcript is provided, what is being said?
-3. **Visual Elements**: List the key objects, locations, and visual details you can SEE
-4. **Mood**: The visual atmosphere/tone
-5. **Story Part**: Describe what is SHOWN in this scene in Bahasa Melayu (2-3 sentences)
+1. **Description**: What is shown in this scene? Describe the setting, characters, and what's happening.
+2. **Dialogue**: Include any dialogue from the audio transcript.
+3. **Visual Elements**: Key objects and details visible in the frames.
+4. **Mood**: The atmosphere of the scene.
+5. **Story Part**: Write a flowing narrative paragraph (2-3 sentences) in Bahasa Melayu.
 
-CRITICAL RULES - DO NOT VIOLATE:
-- ONLY describe what is ACTUALLY VISIBLE in the frames
-- DO NOT invent actions, movements, or events that are not shown
-- DO NOT hallucinate or make up narrative elements
-- If a frame shows static objects (like food on a tray), just describe those objects
-- If no characters are visible, do NOT invent character actions
-- If characters ARE visible, describe ONLY what they are doing in the frames
-- Use character names from personas ONLY if those characters are clearly visible
-- Include dialogue ONLY if audio transcript exists
-- The storyPart should be a FACTUAL DESCRIPTION of what happens in this scene, NOT a creative story
+RULES:
+- Base your storyPart on what is VISIBLE in the frames and AUDIBLE in the transcript
+- If characters are visible, describe what they are doing
+- If only objects are shown (like food, scenery), describe them in a narrative way that fits the story context
+- DO NOT invent character actions that aren't shown
+- DO NOT make up dialogue that isn't in the transcript
+- Write smoothly so the story flows naturally from scene to scene
+- Use character names from personas when those characters appear
 
 Respond in JSON format:
 {
-  "description": "Factual description of what is visible in the frames",
-  "characters": ["characters ACTUALLY visible in the frames"],
-  "dialogue": "Dialogue from audio transcript" or null,
-  "visualElements": ["objects", "you", "can", "see"],
-  "mood": "visual atmosphere",
-  "storyPart": "Factual description in Bahasa Melayu of what is SHOWN in this scene (2-3 sentences, NO invented actions)"
+  "description": "What is shown in this scene",
+  "characters": ["characters visible in the scene"],
+  "dialogue": "Dialogue from transcript" or null,
+  "visualElements": ["key", "visual", "details"],
+  "mood": "atmosphere",
+  "storyPart": "Narrative paragraph in Bahasa Melayu describing this scene (2-3 sentences, based on what's shown)"
 }`;
 
   // Send to OpenAI Vision
   const response = await openai.chat.completions.create({
-    model: 'gpt-5-mini',
+    model: 'gpt-4o-mini',
     messages: [
       {
         role: 'user',
@@ -240,8 +237,9 @@ Respond in JSON format:
         ],
       },
     ],
-    max_completion_tokens: 700,
-    reasoning_effort: "low",
+    max_tokens: 700,
+    temperature: "0"
+    // reasoning_effort: "low",
   });
 
   const content = response.choices[0].message.content;

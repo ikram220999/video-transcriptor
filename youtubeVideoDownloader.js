@@ -42,7 +42,7 @@ export async function downloadYoutubeVideo(youtubeUrl, options = {}) {
   console.log(`⏱️  Duration: ${videoInfo.duration}s`);
 
   // Check duration limit (60 seconds)
-  if (videoInfo.duration > 500) {
+  if (videoInfo.duration > 1000) {
     throw new Error(`Video too long. Maximum duration is 60 seconds. This video is ${videoInfo.duration} seconds.`);
   }
 
@@ -71,7 +71,7 @@ export async function downloadYoutubeVideo(youtubeUrl, options = {}) {
   console.log('═'.repeat(60) + '\n');
 
   // Check file size limit (30MB)
-  if (stats.size > 30 * 1024 * 1024) {
+  if (stats.size > 300 * 1024 * 1024) {
     await fs.unlink(outputPath);
     throw new Error(`Downloaded video too large. Maximum size is 30MB. This video is ${sizeMB}MB.`);
   }

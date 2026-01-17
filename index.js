@@ -33,7 +33,7 @@ function getVideoDuration(videoPath) {
 
 // Constants for validation
 const MAX_FILE_SIZE_MB = 30;
-const MAX_DURATION_SECONDS = 500; // 1 minute
+const MAX_DURATION_SECONDS = 1000; // 1 minute
 
 dotenv.config();
 
@@ -89,7 +89,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB limit
+  limits: { fileSize: 300 * 1024 * 1024 }, // 30MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = /mp4|mov|avi|mkv|webm|m4v/;
     const ext = path.extname(file.originalname).toLowerCase().slice(1);
