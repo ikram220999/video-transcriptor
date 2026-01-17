@@ -181,25 +181,18 @@ async function processScene(scenePath, sceneNumber, totalScenes, personas, audio
     ? `\n\n## AUDIO TRANSCRIPT (what is being said in this scene):\n"${transcript}"\n\nIncorporate this dialogue/narration into your story. If you're not confident about what is being said, just ignore the audio.`
     : '';
 
-  // Build previous scene context - only include if exists and provide clear instructions
+  // Build previous scene context - only include for awareness, not for continuation
   const previousContext = previousSceneContext
-    ? `\n\n## PREVIOUS SCENE (for narrative continuity):
+    ? `\n\n## PREVIOUS SCENE (for context awareness only):
 "${previousSceneContext}"
 
-CONTINUITY RULES:
-- Continue the story naturally from where the previous scene left off
-- Do NOT repeat or summarize what happened in the previous scene
-- Build upon established context (characters, setting, mood)
-- Create smooth transition into this new scene`
+NOTE: This is just for context. Do NOT continue or expand on this. Focus ONLY on what you SEE in the current frames.`
     : '';
 
-  const positionContext = sceneNumber === 1 
-    ? 'This is the OPENING scene - introduce the setting and characters.'
-    : sceneNumber === totalScenes 
-      ? 'This is the FINAL scene - bring the story to a satisfying conclusion.'
-      : `This is scene ${sceneNumber} of ${totalScenes}.`;
+  const positionContext = `This is scene ${sceneNumber} of ${totalScenes}.`;
 
-  const prompt = `You are a storyteller analyzing Scene ${sceneNumber} of ${totalScenes} from a video.
+  const prompt = `You are a video scene analyzer. Your job is to ACCURATELY DESCRIBE what you SEE in the frames.
+
 ${positionContext}
 ${personasContext}
 ${audioContext}
@@ -208,28 +201,31 @@ ${previousContext}
 Analyze these ${imageFiles.length} sequential keyframes and the audio transcript (if provided).
 
 Your task:
-1. **Scene Description**: What is happening visually? Who is present?
-2. **Dialogue/Audio**: What is being said? Who is speaking?
-3. **Visual Elements**: Key objects, locations, expressions, movements
-4. **Mood**: The emotional tone and atmosphere
-5. **Story Contribution**: Write a NEW narrative paragraph (2-3 sentences) for THIS scene only
+1. **Scene Description**: Describe ONLY what you visually see in these frames. What objects, people, or characters are shown? What actions are happening?
+2. **Dialogue/Audio**: If audio transcript is provided, what is being said?
+3. **Visual Elements**: List the key objects, locations, and visual details you can SEE
+4. **Mood**: The visual atmosphere/tone
+5. **Story Part**: Describe what is SHOWN in this scene in Bahasa Melayu (2-3 sentences)
 
-IMPORTANT RULES:
-- Write the story contribution in Bahasa Melayu
-- Use character names from personas if provided
-- Incorporate dialogue naturally if audio transcript exists
-- DO NOT repeat information from the previous scene
-- Focus ONLY on what is NEW in this scene
-- The narrative should advance the story forward
+CRITICAL RULES - DO NOT VIOLATE:
+- ONLY describe what is ACTUALLY VISIBLE in the frames
+- DO NOT invent actions, movements, or events that are not shown
+- DO NOT hallucinate or make up narrative elements
+- If a frame shows static objects (like food on a tray), just describe those objects
+- If no characters are visible, do NOT invent character actions
+- If characters ARE visible, describe ONLY what they are doing in the frames
+- Use character names from personas ONLY if those characters are clearly visible
+- Include dialogue ONLY if audio transcript exists
+- The storyPart should be a FACTUAL DESCRIPTION of what happens in this scene, NOT a creative story
 
 Respond in JSON format:
 {
-  "description": "Detailed scene description combining visuals and audio",
-  "characters": ["characters visible or heard in scene"],
-  "dialogue": "Key dialogue or narration from audio" or null,
-  "visualElements": ["key", "visual", "elements"],
-  "mood": "emotional tone",
-  "storyPart": "NEW narrative paragraph in Bahasa Melayu for THIS scene only (2-3 sentences, no repetition from previous)"
+  "description": "Factual description of what is visible in the frames",
+  "characters": ["characters ACTUALLY visible in the frames"],
+  "dialogue": "Dialogue from audio transcript" or null,
+  "visualElements": ["objects", "you", "can", "see"],
+  "mood": "visual atmosphere",
+  "storyPart": "Factual description in Bahasa Melayu of what is SHOWN in this scene (2-3 sentences, NO invented actions)"
 }`;
 
   // Send to OpenAI Vision
@@ -409,7 +405,7 @@ async function processOutputFolder(outputFolder, onProgress = null) {
             totalScenes,
             percent: Math.round((sceneNumber / totalScenes) * 100),
             message: `Scene ${sceneNumber}/${totalScenes} analyzed`,
-            sceneResult: sceneResult.storyPart ? sceneResult.storyPart.substring(0, 100) : null
+            sceneResult: sceneResult.storyPart ? sceneResult.storyPart : null
           });
         }
         

@@ -252,6 +252,107 @@
     .loading-text {
       animation: pulse 1.5s ease-in-out infinite;
     }
+
+    /* Resource Type Tabs */
+    .resource-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .resource-tab {
+      flex: 1;
+      padding: 0.85rem 1rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .resource-tab:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .resource-tab.active {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .resource-tab-icon {
+      font-size: 1.1rem;
+    }
+
+    .resource-input {
+      display: none;
+    }
+
+    .resource-input.active {
+      display: block;
+    }
+
+    .url-input {
+      width: 100%;
+      padding: 1rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      transition: all 0.3s ease;
+    }
+
+    .url-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .url-input::placeholder {
+      color: var(--text-secondary);
+      opacity: 0.6;
+    }
+
+    .youtube-preview {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: rgba(255, 0, 0, 0.05);
+      border: 1px solid rgba(255, 0, 0, 0.2);
+      border-radius: 8px;
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .youtube-preview.show {
+      display: flex;
+    }
+
+    .youtube-preview-icon {
+      font-size: 1.5rem;
+      color: #ff0000;
+    }
+
+    .youtube-preview-text {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .youtube-preview-url {
+      color: var(--accent);
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -263,7 +364,22 @@
 
     <div class="card">
       <form id="uploadForm">
-        <div class="form-group">
+        <!-- Resource Type Tabs -->
+        <div class="resource-tabs">
+          <button type="button" class="resource-tab active" data-type="video">
+            <span class="resource-tab-icon">📁</span>
+            Upload Video
+          </button>
+          <button type="button" class="resource-tab" data-type="url">
+            <span class="resource-tab-icon">🔗</span>
+            YouTube URL
+          </button>
+        </div>
+
+        <input type="hidden" name="resource_type" id="resourceType" value="video">
+
+        <!-- Video Upload Input -->
+        <div class="form-group resource-input active" id="videoInputGroup">
           <label for="videoInput">Video File</label>
           <div class="upload-zone" id="uploadZone">
             <div class="upload-icon">🎥</div>
@@ -272,8 +388,27 @@
             </div>
             <div class="file-name" id="fileName"></div>
           </div>
-          <input type="file" id="videoInput" name="video" accept="video/*" required>
-          <div class="hint">Supported formats: MP4, MOV, AVI, MKV</div>
+          <input type="file" id="videoInput" name="video" accept="video/*">
+          <div class="hint">Supported formats: MP4, MOV, AVI, MKV • Max 30MB • Max 60 seconds</div>
+        </div>
+
+        <!-- YouTube URL Input -->
+        <div class="form-group resource-input" id="urlInputGroup">
+          <label for="youtubeUrl">YouTube Video URL</label>
+          <input 
+            type="url" 
+            class="url-input" 
+            id="youtubeUrl" 
+            name="youtubeUrl" 
+            placeholder="https://www.youtube.com/watch?v=..."
+          >
+          <div class="hint">Paste a YouTube video URL • Max 60 seconds duration</div>
+          <div class="youtube-preview" id="youtubePreview">
+            <span class="youtube-preview-icon">▶️</span>
+            <div class="youtube-preview-text">
+              Ready to download: <span class="youtube-preview-url" id="previewUrl"></span>
+            </div>
+          </div>
         </div>
 
         <div class="divider"></div>
@@ -311,6 +446,58 @@ Example:
     const uploadForm = document.getElementById('uploadForm');
     const submitBtn = document.getElementById('submitBtn');
     const status = document.getElementById('status');
+    const resourceTypeTabs = document.querySelectorAll('.resource-tab');
+    const resourceTypeInput = document.getElementById('resourceType');
+    const videoInputGroup = document.getElementById('videoInputGroup');
+    const urlInputGroup = document.getElementById('urlInputGroup');
+    const youtubeUrlInput = document.getElementById('youtubeUrl');
+    const youtubePreview = document.getElementById('youtubePreview');
+    const previewUrl = document.getElementById('previewUrl');
+
+    // Resource type tab switching
+    resourceTypeTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const type = tab.dataset.type;
+        
+        // Update active tab
+        resourceTypeTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update hidden input
+        resourceTypeInput.value = type;
+        
+        // Show/hide input groups
+        if (type === 'video') {
+          videoInputGroup.classList.add('active');
+          urlInputGroup.classList.remove('active');
+        } else {
+          videoInputGroup.classList.remove('active');
+          urlInputGroup.classList.add('active');
+        }
+      });
+    });
+
+    // YouTube URL preview
+    youtubeUrlInput.addEventListener('input', (e) => {
+      const url = e.target.value.trim();
+      if (isValidYoutubeUrl(url)) {
+        previewUrl.textContent = url;
+        youtubePreview.classList.add('show');
+      } else {
+        youtubePreview.classList.remove('show');
+      }
+    });
+
+    function isValidYoutubeUrl(url) {
+      try {
+        const urlObj = new URL(url);
+        return ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'].some(
+          host => urlObj.hostname === host || urlObj.hostname.endsWith('.' + host)
+        );
+      } catch {
+        return false;
+      }
+    }
 
     // Click to upload
     uploadZone.addEventListener('click', () => videoInput.click());
@@ -351,6 +538,7 @@ Example:
     // Progress steps for display
     const stepNames = {
       upload: '📤 Upload',
+      youtube: '📺 YouTube Download',
       validation: '✅ Validation',
       init: '🆔 Initialize',
       scenes: '🎬 Scene Detection',
@@ -365,6 +553,29 @@ Example:
     uploadForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
+      const resourceType = resourceTypeInput.value;
+
+      // Validate based on resource type
+      if (resourceType === 'video' && !videoInput.files.length) {
+        status.className = 'status error';
+        status.textContent = '✗ Please select a video file';
+        return;
+      }
+
+      if (resourceType === 'url') {
+        const url = youtubeUrlInput.value.trim();
+        if (!url) {
+          status.className = 'status error';
+          status.textContent = '✗ Please enter a YouTube URL';
+          return;
+        }
+        if (!isValidYoutubeUrl(url)) {
+          status.className = 'status error';
+          status.textContent = '✗ Invalid YouTube URL';
+          return;
+        }
+      }
+
       const formData = new FormData(uploadForm);
       
       // Show loading state

@@ -15,6 +15,7 @@ import { extractAudio, splitAudioByScenes } from './src/audioExtractor.js';
 import { detectScenes } from './src/sceneDetector.js';
 import { extractKeyframes } from './src/keyframeExtractor.js';
 import ffmpeg from 'fluent-ffmpeg';
+import { downloadYoutubeVideo, isValidYoutubeUrl } from './youtubeVideoDownloader.js';
 
 // Get video duration using ffprobe
 function getVideoDuration(videoPath) {
@@ -32,7 +33,7 @@ function getVideoDuration(videoPath) {
 
 // Constants for validation
 const MAX_FILE_SIZE_MB = 30;
-const MAX_DURATION_SECONDS = 60; // 1 minute
+const MAX_DURATION_SECONDS = 500; // 1 minute
 
 dotenv.config();
 
@@ -200,6 +201,7 @@ function sendSSE(res, event, data) {
 }
 
 // API endpoint to upload and process video with SSE progress
+// Supports both video file upload and YouTube URL
 app.post('/api/upload', uploadLimiter, upload.single('video'), async (req, res) => {
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -208,47 +210,116 @@ app.post('/api/upload', uploadLimiter, upload.single('video'), async (req, res) 
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
+  let videoPath = null;
+  let isYoutubeDownload = false;
+
   try {
-    if (!req.file) {
-      sendSSE(res, 'error', { message: 'No video file uploaded' });
-      return res.end();
-    }
-
-    const videoPath = req.file.path;
+    const resourceType = req.body.resource_type || 'video';
     const personas = req.body.personas || '';
-    const fileSizeMB = req.file.size / (1024 * 1024);
 
-    // Progress: Upload received
-    sendSSE(res, 'progress', { 
-      step: 'upload', 
-      status: 'completed',
-      message: `Video uploaded: ${req.file.originalname}`,
-      details: { fileName: req.file.originalname, sizeMB: fileSizeMB.toFixed(2) }
-    });
+    // Handle based on resource type
+    if (resourceType === 'url') {
+      // YouTube URL download
+      const youtubeUrl = req.body.youtubeUrl;
+      
+      if (!youtubeUrl) {
+        sendSSE(res, 'error', { message: 'No YouTube URL provided' });
+        return res.end();
+      }
 
-    // Progress: Validating video
-    sendSSE(res, 'progress', { 
-      step: 'validation', 
-      status: 'started',
-      message: 'Checking video duration...'
-    });
+      if (!isValidYoutubeUrl(youtubeUrl)) {
+        sendSSE(res, 'error', { message: 'Invalid YouTube URL' });
+        return res.end();
+      }
 
-    const duration = await getVideoDuration(videoPath);
-
-    if (duration > MAX_DURATION_SECONDS) {
-      await fs.unlink(videoPath);
-      sendSSE(res, 'error', { 
-        message: `Video too long. Maximum duration is ${MAX_DURATION_SECONDS} seconds (1 minute). Your video is ${duration.toFixed(2)} seconds.` 
+      sendSSE(res, 'progress', { 
+        step: 'youtube', 
+        status: 'started',
+        message: 'Fetching video from YouTube...',
+        details: { url: youtubeUrl }
       });
-      return res.end();
-    }
 
-    sendSSE(res, 'progress', { 
-      step: 'validation', 
-      status: 'completed',
-      message: `Video validated: ${duration.toFixed(2)}s duration`,
-      details: { durationSeconds: duration.toFixed(2) }
-    });
+      try {
+        const downloadResult = await downloadYoutubeVideo(youtubeUrl, {
+          onProgress: (progress) => {
+            sendSSE(res, 'progress', {
+              step: 'youtube',
+              status: 'downloading',
+              message: progress.message,
+              details: progress
+            });
+          }
+        });
+
+        videoPath = downloadResult.videoPath;
+        isYoutubeDownload = true;
+
+        sendSSE(res, 'progress', { 
+          step: 'youtube', 
+          status: 'completed',
+          message: `Downloaded: ${downloadResult.title}`,
+          details: { 
+            title: downloadResult.title, 
+            duration: downloadResult.duration,
+            sizeMB: downloadResult.sizeMB 
+          }
+        });
+
+        // YouTube downloader already validates duration and size
+        sendSSE(res, 'progress', { 
+          step: 'validation', 
+          status: 'completed',
+          message: `Video validated: ${downloadResult.duration}s duration`,
+          details: { durationSeconds: downloadResult.duration }
+        });
+
+      } catch (ytError) {
+        sendSSE(res, 'error', { message: `YouTube download failed: ${ytError.message}` });
+        return res.end();
+      }
+
+    } else {
+      // Regular video file upload
+      if (!req.file) {
+        sendSSE(res, 'error', { message: 'No video file uploaded' });
+        return res.end();
+      }
+
+      videoPath = req.file.path;
+      const fileSizeMB = req.file.size / (1024 * 1024);
+
+      // Progress: Upload received
+      sendSSE(res, 'progress', { 
+        step: 'upload', 
+        status: 'completed',
+        message: `Video uploaded: ${req.file.originalname}`,
+        details: { fileName: req.file.originalname, sizeMB: fileSizeMB.toFixed(2) }
+      });
+
+      // Progress: Validating video
+      sendSSE(res, 'progress', { 
+        step: 'validation', 
+        status: 'started',
+        message: 'Checking video duration...'
+      });
+
+      const duration = await getVideoDuration(videoPath);
+
+      if (duration > MAX_DURATION_SECONDS) {
+        await fs.unlink(videoPath);
+        sendSSE(res, 'error', { 
+          message: `Video too long. Maximum duration is ${MAX_DURATION_SECONDS} seconds (1 minute). Your video is ${duration.toFixed(2)} seconds.` 
+        });
+        return res.end();
+      }
+
+      sendSSE(res, 'progress', { 
+        step: 'validation', 
+        status: 'completed',
+        message: `Video validated: ${duration.toFixed(2)}s duration`,
+        details: { durationSeconds: duration.toFixed(2) }
+      });
+    }
 
     // Generate job ID
     const jobId = uuidv4();
